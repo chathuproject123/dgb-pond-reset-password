@@ -1,9 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
-import { supabase, handleSupabaseError } from '../lib/supabase'
-import Layout from '../components/Layout'
-import LoadingSpinner from '../components/LoadingSpinner'
-import Toast from '../components/Toast'
+import { supabase } from '../lib/supabase'
 
 export default function UpdatePassword() {
   const router = useRouter()
@@ -12,23 +9,21 @@ export default function UpdatePassword() {
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState(null)
   const [error, setError] = useState(null)
-  const [messageType, setMessageType] = useState('')
   const [verifying, setVerifying] = useState(true)
-  const [verified, setVerified] = useState(false)
 
   useEffect(() => {
+    // Verify the recovery token
     const verifyToken = async () => {
       try {
         const { token_hash, type } = router.query
 
         if (!token_hash || type !== 'recovery') {
           setError('Invalid or expired reset link')
-          setMessageType('error')
           setVerifying(false)
           return
         }
 
-        // Verify the OTP token
+        // Verify the OTP
         const { error } = await supabase.auth.verifyOtp({
           token_hash,
           type: 'recovery',
@@ -36,13 +31,10 @@ export default function UpdatePassword() {
 
         if (error) throw error
 
-        setVerified(true)
-        setMessage('✅ Token verified! Set your new password.')
-        setMessageType('success')
+        setVerifying(false)
+        setMessage('Token verified! Set your new password.')
       } catch (err) {
-        setError(handleSupabaseError(err))
-        setMessageType('error')
-      } finally {
+        setError(err.message || 'Invalid or expired reset link')
         setVerifying(false)
       }
     }
@@ -58,17 +50,14 @@ export default function UpdatePassword() {
     setError(null)
     setMessage(null)
 
-    // Validate password
     if (password.length < 6) {
       setError('Password must be at least 6 characters')
-      setMessageType('error')
       setLoading(false)
       return
     }
 
     if (password !== confirmPassword) {
       setError('Passwords do not match')
-      setMessageType('error')
       setLoading(false)
       return
     }
@@ -80,311 +69,187 @@ export default function UpdatePassword() {
 
       if (error) throw error
 
-      setMessage('✅ Password updated successfully! Redirecting to app...')
-      setMessageType('success')
-
+      setMessage('Password updated successfully! Redirecting...')
+      
       // Redirect to app after 3 seconds
       setTimeout(() => {
-        const deepLink = process.env.NEXT_PUBLIC_APP_DEEP_LINK || 'myapp://password-reset-success'
-        window.location.href = deepLink
+        window.location.href = 'myapp://password-reset-success'
       }, 3000)
     } catch (err) {
-      setError(handleSupabaseError(err))
-      setMessageType('error')
+      setError(err.message || 'Failed to update password')
     } finally {
       setLoading(false)
     }
   }
 
-  // Render loading state
   if (verifying) {
     return (
-      <Layout title="Verifying">
-        <div className="container">
-          <div className="card">
-            <h2 className="title">Verifying...</h2>
-            <p className="description">Please wait while we verify your reset link</p>
-            <LoadingSpinner />
-            <style jsx>{`
-              .container {
-                min-height: 100vh;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                background: linear-gradient(135deg, #1B5E20 0%, #2E7D32 100%);
-                padding: 20px;
-              }
-              .card {
-                background: white;
-                border-radius: 24px;
-                padding: 48px 40px;
-                max-width: 440px;
-                width: 100%;
-                text-align: center;
-                box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-              }
-              .title {
-                font-size: 24px;
-                font-weight: 600;
-                color: #1B5E20;
-                margin: 0 0 8px 0;
-              }
-              .description {
-                color: #666;
-                margin-bottom: 24px;
-              }
-            `}</style>
-          </div>
-        </div>
-      </Layout>
-    )
-  }
-
-  // Render error state
-  if (error && !verified) {
-    return (
-      <Layout title="Invalid Link">
-        <div className="container">
-          <div className="card">
-            <div className="icon">❌</div>
-            <h2 className="title">Invalid Reset Link</h2>
-            <p className="description">{error}</p>
-            <button
-              onClick={() => router.push('/')}
-              className="btn btn-primary"
-            >
-              Request New Link
-            </button>
-            <style jsx>{`
-              .container {
-                min-height: 100vh;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                background: linear-gradient(135deg, #1B5E20 0%, #2E7D32 100%);
-                padding: 20px;
-              }
-              .card {
-                background: white;
-                border-radius: 24px;
-                padding: 48px 40px;
-                max-width: 440px;
-                width: 100%;
-                text-align: center;
-                box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-              }
-              .icon {
-                font-size: 48px;
-                margin-bottom: 16px;
-              }
-              .title {
-                font-size: 24px;
-                font-weight: 600;
-                color: #1B5E20;
-                margin: 0 0 8px 0;
-              }
-              .description {
-                color: #666;
-                margin-bottom: 24px;
-              }
-              .btn {
-                padding: 14px 32px;
-                border: none;
-                border-radius: 12px;
-                font-size: 16px;
-                font-weight: 600;
-                cursor: pointer;
-                transition: all 0.3s;
-                background: #2E7D32;
-                color: white;
-              }
-              .btn:hover {
-                background: #1B5E20;
-                transform: translateY(-2px);
-                box-shadow: 0 4px 12px rgba(46, 125, 50, 0.3);
-              }
-            `}</style>
-          </div>
-        </div>
-      </Layout>
-    )
-  }
-
-  // Render update password form
-  return (
-    <Layout title="Update Password">
-      <div className="container">
-        <div className="card">
-          <div className="icon">🔑</div>
-          <h1 className="title">Set New Password</h1>
-          <p className="description">Create a new password for your account</p>
-
-          {message && <Toast message={message} type={messageType} onDismiss={() => setMessage(null)} />}
-          {error && <Toast message={error} type="error" onDismiss={() => setError(null)} />}
-
-          <form onSubmit={handleUpdatePassword} className="form">
-            <div className="input-group">
-              <label htmlFor="password">New Password</label>
-              <input
-                id="password"
-                type="password"
-                placeholder="Min 6 characters"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className="input"
-                disabled={loading}
-                minLength={6}
-              />
-            </div>
-
-            <div className="input-group">
-              <label htmlFor="confirmPassword">Confirm Password</label>
-              <input
-                id="confirmPassword"
-                type="password"
-                placeholder="Confirm your new password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                required
-                className="input"
-                disabled={loading}
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className={`btn btn-primary ${loading ? 'loading' : ''}`}
-            >
-              {loading ? <LoadingSpinner /> : 'Update Password'}
-            </button>
-          </form>
-
-          <div className="footer">
-            <a href={process.env.NEXT_PUBLIC_APP_DEEP_LINK || 'myapp://login'} className="link">
-              ← Back to App
-            </a>
-          </div>
-
-          <style jsx>{`
-            .container {
-              min-height: 100vh;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              background: linear-gradient(135deg, #1B5E20 0%, #2E7D32 50%, #1B5E20 100%);
-              padding: 20px;
-            }
-            .card {
-              background: white;
-              border-radius: 24px;
-              padding: 48px 40px;
-              max-width: 440px;
-              width: 100%;
-              box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            }
-            .icon {
-              font-size: 48px;
-              display: block;
-              text-align: center;
-              margin-bottom: 16px;
-            }
-            .title {
-              font-size: 28px;
-              font-weight: 700;
-              color: #1B5E20;
-              text-align: center;
-              margin: 0 0 8px 0;
-            }
-            .description {
-              color: #666;
-              text-align: center;
-              margin-bottom: 28px;
-              font-size: 15px;
-            }
-            .form {
-              display: flex;
-              flex-direction: column;
-              gap: 16px;
-            }
-            .input-group {
-              display: flex;
-              flex-direction: column;
-              gap: 6px;
-            }
-            .input-group label {
-              font-size: 14px;
-              font-weight: 500;
-              color: #333;
-            }
-            .input {
-              padding: 14px 16px;
-              border: 2px solid #e0e0e0;
-              border-radius: 12px;
-              font-size: 16px;
-              transition: all 0.3s;
-              outline: none;
-              width: 100%;
-            }
-            .input:focus {
-              border-color: #2E7D32;
-              box-shadow: 0 0 0 4px rgba(46, 125, 50, 0.1);
-            }
-            .input:disabled {
-              opacity: 0.6;
-              cursor: not-allowed;
-            }
-            .btn {
-              padding: 14px;
-              border: none;
-              border-radius: 12px;
-              font-size: 16px;
-              font-weight: 600;
-              cursor: pointer;
-              transition: all 0.3s;
-              display: flex;
-              justify-content: center;
-              align-items: center;
-              min-height: 52px;
-            }
-            .btn-primary {
-              background: #2E7D32;
-              color: white;
-            }
-            .btn-primary:hover:not(:disabled) {
-              background: #1B5E20;
-              transform: translateY(-2px);
-              box-shadow: 0 4px 12px rgba(46, 125, 50, 0.3);
-            }
-            .btn-primary:active:not(:disabled) {
-              transform: translateY(0);
-            }
-            .btn-primary:disabled {
-              opacity: 0.7;
-              cursor: not-allowed;
-            }
-            .btn-primary.loading {
-              opacity: 0.8;
-            }
-            .footer {
-              margin-top: 24px;
-              text-align: center;
-            }
-            .link {
-              color: #2E7D32;
-              text-decoration: none;
-              font-size: 14px;
-              font-weight: 500;
-              transition: color 0.3s;
-            }
-            .link:hover {
-              color: #1B5E20;
-              text-decoration: underline;
-            }
-          `}</style>
+      <div style={styles.container}>
+        <div style={styles.card}>
+          <h2 style={styles.title}>Verifying...</h2>
+          <p style={styles.subtitle}>Please wait while we verify your reset link</p>
+          <div style={styles.loader}></div>
         </div>
       </div>
-    </Layout>
+    )
+  }
+
+  return (
+    <div style={styles.container}>
+      <div style={styles.card}>
+        <h1 style={styles.title}>🔑 Set New Password</h1>
+        <p style={styles.subtitle}>Create a new password for your account</p>
+
+        {message && (
+          <div style={styles.success}>
+            ✅ {message}
+          </div>
+        )}
+
+        {error && (
+          <div style={styles.error}>
+            ❌ {error}
+          </div>
+        )}
+
+        <form onSubmit={handleUpdatePassword} style={styles.form}>
+          <input
+            type="password"
+            placeholder="New password (min 6 characters)"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            style={styles.input}
+          />
+          <input
+            type="password"
+            placeholder="Confirm new password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            required
+            style={styles.input}
+          />
+          <button
+            type="submit"
+            disabled={loading}
+            style={{
+              ...styles.button,
+              opacity: loading ? 0.7 : 1,
+            }}
+          >
+            {loading ? 'Updating...' : 'Update Password'}
+          </button>
+        </form>
+
+        <div style={styles.footer}>
+          <a href="myapp://login" style={styles.link}>
+            ← Back to App
+          </a>
+        </div>
+      </div>
+    </div>
   )
+}
+
+const styles = {
+  container: {
+    minHeight: '100vh',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    background: 'linear-gradient(135deg, #1B5E20 0%, #2E7D32 100%)',
+    padding: '20px',
+    fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif',
+  },
+  card: {
+    background: 'white',
+    borderRadius: '16px',
+    padding: '40px',
+    maxWidth: '440px',
+    width: '100%',
+    boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+  },
+  title: {
+    fontSize: '28px',
+    fontWeight: 'bold',
+    color: '#1B5E20',
+    marginBottom: '8px',
+    textAlign: 'center',
+  },
+  subtitle: {
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: '24px',
+    fontSize: '14px',
+  },
+  form: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+  },
+  input: {
+    padding: '12px 16px',
+    border: '2px solid #e0e0e0',
+    borderRadius: '8px',
+    fontSize: '16px',
+    transition: 'border-color 0.3s',
+    outline: 'none',
+  },
+  button: {
+    padding: '12px',
+    background: '#2E7D32',
+    color: 'white',
+    border: 'none',
+    borderRadius: '8px',
+    fontSize: '16px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'background 0.3s',
+  },
+  success: {
+    background: '#E8F5E9',
+    color: '#1B5E20',
+    padding: '12px',
+    borderRadius: '8px',
+    marginBottom: '16px',
+    fontSize: '14px',
+  },
+  error: {
+    background: '#FFEBEE',
+    color: '#C62828',
+    padding: '12px',
+    borderRadius: '8px',
+    marginBottom: '16px',
+    fontSize: '14px',
+  },
+  footer: {
+    marginTop: '20px',
+    textAlign: 'center',
+  },
+  link: {
+    color: '#2E7D32',
+    textDecoration: 'none',
+    fontSize: '14px',
+  },
+  loader: {
+    width: '40px',
+    height: '40px',
+    margin: '20px auto',
+    border: '4px solid #E8F5E9',
+    borderTop: '4px solid #2E7D32',
+    borderRadius: '50%',
+    animation: 'spin 1s linear infinite',
+  },
+}
+
+// Add this to your global CSS or component styles
+if (typeof document !== 'undefined') {
+  const style = document.createElement('style')
+  style.textContent = `
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  `
+  document.head.appendChild(style)
 }
