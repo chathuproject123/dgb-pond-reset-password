@@ -1,99 +1,107 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { useRouter } from 'next/navigation'
 
-export default function ForgotPasswordPage() {
-  const [email, setEmail] = useState('')
-  const [loading, setLoading] = useState(false)
+export default function ResetPasswordPage() {
+  const [password, setPassword] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [updating, setUpdating] = useState(false)
   const [message, setMessage] = useState({ text: '', isError: false })
   
   const supabase = createClientComponentClient()
+  const router = useRouter()
 
-  const handleResetRequest = async (e) => {
-    e.preventDefault()
-    setLoading(true)
-    setMessage({ text: '', isError: false })
-
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      // Points directly to your live production root reset-password page
-      redirectTo: 'https://yourdomain.com', 
+  useEffect(() => {
+    // Listen for the recovery event triggered automatically by the email link token
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        // Token validated successfully. Allow user to type their new password.
+        setLoading(false)
+      } else if (event === 'SIGNED_IN' && session) {
+        // Fallback for immediate session recognition
+        setLoading(false)
+      } else {
+        // If no valid session is found within 3 seconds, show an error
+        const timer = setTimeout(() => {
+          setLoading(false)
+          setMessage({ text: 'Link invalid or expired. Please request a new one.', isError: true })
+        }, 3000)
+        return () => clearTimeout(timer)
+      }
     })
 
-    setLoading(false)
+    return () => subscription.unsubscribe()
+  }, [supabase])
+
+  const handlePasswordUpdate = async (e) => {
+    e.preventDefault()
+    setUpdating(true)
+    setMessage({ text: '', isError: false })
+
+    // Updates the password for the currently logged-in recovery user
+    const { error } = await supabase.auth.updateUser({
+      password: password
+    })
+
+    setUpdating(false)
     if (error) {
       setMessage({ text: error.message, isError: true })
     } else {
-      setMessage({ text: 'Check your email inbox for your secure link!', isError: false })
-      setEmail('')
+      setMessage({ text: 'Password updated successfully! Redirecting...', isError: false })
+      
+      // Redirect to login or home dashboard after 2 seconds
+      setTimeout(() => {
+        router.push('/dashboard')
+      }, 2000)
     }
   }
 
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-12 sm:px-6 lg:px-8">
-      <div className="w-full max-w-md space-y-8 rounded-xl border border-gray-200 bg-white p-8 shadow-sm">
-        <div>
-          <h2 className="mt-2 text-center text-3xl font-bold tracking-tight text-gray-900">
-            Reset Password
-          </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
-            Enter your account email below, and we will send you a secure link to choose a new password.
-          </p>
-        </div>
-
-        <form className="mt-8 space-y-6" onSubmit={handleResetRequest}>
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-              Email Address
-            </label>
-            <div className="mt-1">
-              <input
-                id="email"
-                name="email"
-                type="email"
-                autoComplete="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                className="block w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-400 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
-              />
-            </div>
-          </div>
-
-          <div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="group relative flex w-full justify-center rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {loading ? (
-                <span className="flex items-center space-x-2">
-                  <svg className="h-4 w-4 animate-spin text-white" xmlns="http://w3.org" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  <span>Sending Link...</span>
-                </span>
-              ) : (
-                'Send Reset Link'
-              )}
-            </button>
-          </div>
-        </form>
-
-        {message.text && (
-          <div
-            className={`mt-4 rounded-md p-4 text-sm font-medium ${
-              message.isError
-                ? 'bg-red-50 text-red-700 border border-red-200'
-                : 'bg-green-50 text-green-700 border border-green-200'
-            }`}
-          >
-            {message.text}
-          </div>
-        )}
+  if (loading) {
+    return (
+      <div style={{ maxWidth: '400px', margin: '100px auto', textAlign: 'center', fontFamily: 'sans-serif' }}>
+        <p>Verifying secure email link, please wait...</p>
       </div>
+    )
+  }
+
+  return (
+    <div style={{ maxWidth: '400px', margin: '100px auto', padding: '24px', border: '1px solid #e5e7eb', borderRadius: '8px', fontFamily: 'sans-serif' }}>
+      <h2 style={{ marginBottom: '16px', fontSize: '20px', fontWeight: 'bold' }}>Enter New Password</h2>
+      
+      {/* Show the form only if there isn't an initial link error */}
+      {(!message.isError || updating) && (
+        <form onSubmit={handlePasswordUpdate}>
+          <div style={{ marginBottom: '16px' }}>
+            <label htmlFor="password" style={{ display: 'block', marginBottom: '6px', fontSize: '14px', fontWeight: '500' }}>New Password</label>
+            <input 
+              type="password" 
+              id="password"
+              placeholder="Minimum 6 characters" 
+              value={password} 
+              onChange={(e) => setPassword(e.target.value)} 
+              required 
+              minLength={6}
+              style={{ width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ccc', boxSizing: 'border-box' }}
+            />
+          </div>
+          
+          <button 
+            type="submit" 
+            disabled={updating}
+            style={{ width: '100%', padding: '12px', backgroundColor: '#2563eb', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: '500' }}
+          >
+            {updating ? 'Saving...' : 'Update Password'}
+          </button>
+        </form>
+      )}
+
+      {message.text && (
+        <p style={{ marginTop: '16px', padding: '10px', borderRadius: '4px', backgroundColor: message.isError ? '#fee2e2' : '#dcfce7', color: message.isError ? '#dc2626' : '#16a34a', fontSize: '14px' }}>
+          {message.text}
+        </p>
+      )}
     </div>
   )
 }
